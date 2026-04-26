@@ -1,0 +1,4 @@
+interface:
+  display_name: "Japan Real Estate Data Retriever"
+  short_description: "Browser Use workflows for Japanese property data"
+  default_prompt: "Use $japan-real-estate-data-retriever to retrieve Japanese real estate listings into the unified schema."

@@ -1,0 +1,18 @@
+{
+  "schema_version": "2026-04-26",
+  "intent": "search_real_estate_listings",
+  "transaction_type": "sale",
+  "property_type": "中古マンション",
+  "area": {
+    "prefecture": "東京都",
+    "city_or_ward": "新宿区"
+  },
+  "filters": {
+    "max_price_jpy": 80000000,
+    "min_floor_area_sqm": 40,
+    "layout": ["1LDK", "2LDK"],
+    "max_walk_minutes": 10
+  },
+  "max_results": 10,
+  "notes": "Prefer detail-page fields. Use null when a field cannot be determined."
+}

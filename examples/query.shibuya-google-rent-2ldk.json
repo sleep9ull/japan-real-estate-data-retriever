@@ -1,0 +1,29 @@
+{
+  "schema_version": "2026-04-26",
+  "intent": "search_real_estate_listings",
+  "transaction_type": "rent",
+  "property_type": "apartment",
+  "area": {
+    "prefecture": "東京都",
+    "station": "渋谷駅",
+    "commute_destination": "Google Japan - Shibuya",
+    "commute_destination_address_hint": "Shibuya Stream, Shibuya, Tokyo"
+  },
+  "commute": {
+    "destination": "Google Japan - Shibuya",
+    "max_minutes": 40,
+    "max_transfers": 1,
+    "max_trains": 2
+  },
+  "filters": {
+    "layout": ["2LDK"],
+    "target_floor_area_sqm": 60,
+    "min_floor_area_sqm": 50,
+    "max_floor_area_sqm": 75,
+    "target_monthly_rent_jpy": 200000,
+    "max_monthly_rent_jpy": 230000
+  },
+  "max_results_per_source": 10,
+  "sources": ["suumo", "athome", "homes", "yahoo_japan"],
+  "notes": "Use local Browser Use CLI only for debugging. Prefer listings with commute to Google Japan - Shibuya within 40 minutes and at most one transfer."
+}
