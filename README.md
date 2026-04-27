@@ -166,11 +166,6 @@ PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli debug-local \
 7. Retry browser-only per source or refine the workflow when results are incomplete.
 8. Use `run-agent` as fallback or exploration, and fold learnings back into the workflow references.
 
-## Recent Empirical Notes
-
-- Browser-only isolated execution on 2026-04-27 extracted raw rows from all four sources: SUUMO 54, at home 172, HOME'S 58, Yahoo 42; local ranking selected 10 rows per source, 40 total.
-- at home, HOME'S, and Yahoo raised `TargetClosedError` during a longer first pass, but reconnecting to the same `cdpUrl` found usable loaded DOM. The default recovery is reconnect-and-reuse before switching to Agent fallback.
-
 ## Data Schema
 
 Canonical schema:

@@ -184,16 +184,6 @@ PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli debug-local \
 7. 如果数量不足、站点阻断或字段缺失，先 browser-only 单站重试或调整 workflow。
 8. 仍失败时用 `run-agent` 作为 fallback，并把结果差异写入 workflow 参考文档。
 
-## 最近实测结论
-
-- browser-only 路径可以稳定表达项目主架构，成本更可控，也更适合长期沉淀站点 workflow。
-- 同一个 browser session 跨多个站点运行时，认证页、SPA 超时或 page/context close 可能污染后续站点；因此项目强制每站单开 session。
-- 2026-04-27 的 browser-only isolated 实测中，4 个 source 分别抽取 raw rows：SUUMO 54、at home 172、HOME'S 58、Yahoo 42，最终每站选出 10 条、共 40 条。
-- 同次实测里 at home / HOME'S / Yahoo 初次长流程出现过 `TargetClosedError`，但重连同一个 `cdpUrl` 后页面 DOM 仍可用；因此默认恢复策略是“先重连并复用 DOM”，不是立刻切 Agent。
-- v3 Agent fallback 在 Yahoo Japan 这类 browser-only 不稳定页面上更容易跑通。
-- v3 Agent 的输出数量和字段质量不一定稳定；例如一次实测里 SUUMO/Yahoo 返回 10 条，但 at home/HOME'S 未补满 10 条，且字段质量需要再归一化。
-- 因此本项目默认采用：**browser-only primary，Agent fallback**。
-
 ## 参考文档
 
 - `skills/japan-real-estate-data-retriever/SKILL.md`
