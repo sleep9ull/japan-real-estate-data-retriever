@@ -2,40 +2,58 @@
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-这是一个 workflow 优先的日本不动产信息检索项目。当前重点不是写死网页爬虫，而是沉淀稳定的 Browser Use Cloud workflow、通用 JSON Schema、来源隔离 ID 规则，以及未来 agent 可以调用的结构化输出。
+这是一个 workflow 优先的日本不动产信息检索项目。核心思路是：**Browser Use Cloud 主要提供云端浏览器和日本代理，你自己的 agent 按项目 skills/workflow 驱动浏览器；Browser Use Cloud Agent v3 只作为兜底、修复和探索路径。**
+
+## 架构原则
+
+- 主路径使用 Browser Use Cloud standalone browser：`POST /browsers`，固定 `proxyCountryCode: "jp"`。
+- 多站点任务强制每个 source 单独创建 Cloud Browser session；不要在同一个 browser/context 里连续跑多个来源站点。
+- 本地 agent 通过返回的 `cdpUrl` 接管云端浏览器，并按照本项目维护的站点 workflow 执行搜索、筛选、翻页和详情页抽取。
+- Browser Use Cloud Agent v3：`POST /sessions`，仅用于 browser-only 失败、某站点流程变更、需要快速探索页面结构，或需要补足缺失结果时。
+- 本地 `browser-use` CLI 只用于本机浏览器调试，不作为生产路径。
+- 所有输出最终都要归一化到 `schemas/unified_listing.schema.json`。
 
 ## 目标
 
-- 使用 Browser Use Cloud 的云端 agent 浏览器访问 SUUMO、at home、LIFULL HOME'S、Yahoo! JAPAN Real Estate。
-- 为每个来源站点维护独立的 workflow 和字段映射参考。
-- 将不同来源详情页数据统一为一个通用 JSON 格式。
-- 保留一个稳定 JSON contract，供未来 agent workflow 使用。
+- 为 SUUMO、at home、LIFULL HOME'S、Yahoo! JAPAN Real Estate 维护独立 workflow 和字段映射。
+- 将不同来源详情页数据统一为稳定 JSON/CSV 输出。
 - 支持未来 Hermes agent 或其他 agent 根据用户个性化不动产搜索需求调用。
+- 用确定性的站点 workflow 降低长期运行成本，并减少外部 Agent 自主判断带来的字段漂移。
+- 保留 Cloud Agent fallback，提高 Yahoo、认证页、站点变化等复杂场景下的恢复能力。
 
 ## 目录结构
 
 ```text
 .
-├── skills/japan-real-estate-data-retriever/    # versioned Codex skill
-│   ├── SKILL.md                         # agent workflow entrypoint
-│   └── references/                      # site workflows, field mappings, design notes
-├── schemas/unified_listing.schema.json  # canonical generic JSON Schema
-├── src/japan_real_estate_data_retriever/  # single execution implementation
-├── examples/                            # sample query requests
-├── tests/                               # fast tests without external APIs
-├── data/raw/                            # raw probe/session outputs
-└── data/normalized/                     # normalized output files
+├── skills/japan-real-estate-data-retriever/      # Codex skill 与站点 workflow
+│   ├── SKILL.md
+│   └── references/                               # site-*.md、字段映射、探测记录
+├── schemas/unified_listing.schema.json           # canonical JSON Schema
+├── src/japan_real_estate_data_retriever/         # Cloud API、CLI、normalization
+├── examples/                                     # 示例查询
+├── tests/                                        # 不依赖外部 API 的快速测试
+├── data/raw/                                     # 原始 session/probe/browser 输出
+└── data/exports/                                 # CSV 导出结果
 ```
 
 ## 前置条件
 
-项目默认使用 **Browser Use Cloud**，通过 REST API 执行。上线/生产路径应使用这个默认 backend。请通过环境变量或本地 `.env` 提供 API key：
+生产路径需要 Browser Use Cloud API key。只允许从环境变量或本地 `.env` 读取，不要打印或提交真实值：
 
 ```bash
 export BROWSER_USE_API_KEY=bu_your_key_here
 ```
 
-可选：仅在明确指定或本地调试时安装 Browser Use CLI。CLI 不是生产默认执行路径。
+本地开发：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+PYTHONPATH=src python3 -m unittest discover -s tests
+```
+
+可选：仅在本地浏览器调试时安装 Browser Use CLI：
 
 ```bash
 curl -fsSL https://browser-use.com/cli/install.sh | bash
@@ -43,80 +61,138 @@ source ~/.zshrc
 browser-use doctor
 ```
 
-如果安装后仍提示 `browser-use: command not found`，新开一个终端，或直接使用安装环境里的完整路径：
+## 主路径：Browser-only
+
+生成 browser-only 执行计划，不调用外部 API：
 
 ```bash
-~/.browser-use-env/bin/browser-use doctor
-```
-
-也可以给本项目显式指定 CLI 路径：
-
-```bash
-export BROWSER_USE_CLI="$HOME/.browser-use-env/bin/browser-use"
-```
-
-`browser-use doctor` 里的 `cloudflared not installed` 只影响 `browser-use tunnel`，普通本地 CLI 调试不需要。使用代理时出现 network warning 也不一定代表安装失败。
-
-## 本地开发
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-python -m unittest discover -s tests
-```
-
-生成 Browser Use task payload，但不调用外部 API：
-
-```bash
-python -m japan_real_estate_data_retriever.cli build-task \
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli build-task \
   --site suumo \
-  --query-file examples/query.tokyo-condo.json \
-  --out data/raw/suumo-task.json
+  --query-file examples/query.shibuya-google-rent-2ldk.json \
+  --out data/raw/suumo-browser-plan.json
 ```
 
-发起云端任务前 dry-run：
+创建 Cloud Browser session，并输出 `browser.cdpUrl` 和本地 agent workflow context：
 
 ```bash
-python -m japan_real_estate_data_retriever.cli run \
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli run \
   --site suumo \
-  --query-file examples/query.tokyo-condo.json \
-  --dry-run
+  --query-file examples/query.shibuya-google-rent-2ldk.json \
+  --out data/raw/suumo-browser-session.json
 ```
 
-执行真实任务。默认走 Browser Use Cloud REST API，并使用 `proxyCountryCode: "jp"`：
+多站点任务使用 `run-all`，它会按来源站点强制单开 session：
 
 ```bash
-python -m japan_real_estate_data_retriever.cli run \
-  --site suumo \
-  --query-file examples/query.tokyo-condo.json \
-  --out data/raw/suumo-session-result.json
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli run-all \
+  --query-file examples/query.shibuya-google-rent-2ldk.json \
+  --out data/raw/shibuya-google-browser-sessions.json
 ```
 
-使用本地 Browser Use CLI 做纯本地浏览器调试：
+也可以显式指定来源：
 
 ```bash
-python -m japan_real_estate_data_retriever.cli debug-local \
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli run-all \
+  --query-file examples/query.shibuya-google-rent-2ldk.json \
+  --sources suumo athome homes yahoo_japan \
+  --out data/raw/shibuya-google-browser-sessions.json
+```
+
+你的 agent 接下来应读取 `data/raw/suumo-browser-session.json`：
+
+- `browser.cdpUrl`：用 Playwright/Puppeteer/CDP 连接云端浏览器。
+- `workflow.instructions`：站点执行手册，包含筛选、详情页优先级、字段要求。
+- `workflow.browserOnlyExecutionPolicy` / `executionPolicy`：browser-only 运行规程，包含重连、DOM 复用、失败隔离和停止 session 的规则。
+- `workflow.outputSchema`：最终结构化输出必须符合的 schema。
+
+browser-only 执行时建议按来源站点拆成短任务：
+
+1. 连接该 source 的 `cdpUrl`。
+2. 导航到目标页面，或复用已经加载好的当前页面。
+3. 先落 per-source raw HTML/JSON，再做本地归一化和排序。
+4. 如果 `Page.goto` 超时，但页面已经开始加载，先重连同一个 `cdpUrl` 检查当前 DOM。
+5. 如果遇到 `TargetClosedError`，先重连同一个 `cdpUrl`；只要 `document.title` 和站点列表 selector 存在，就直接复用已加载 DOM 抽取。
+6. 只有当前 browser 无法重连或 DOM 不可用时，才为该 source 重建 Cloud Browser。
+
+任务完成后停止 Cloud Browser：
+
+```bash
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli stop-browser \
+  --browser-id <browser-session-id>
+```
+
+停止多个 browser session：
+
+```bash
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli stop-browser \
+  --browser-id <suumo-browser-id> <athome-browser-id> <homes-browser-id> <yahoo-browser-id>
+```
+
+## 兜底路径：Cloud Agent v3
+
+当 browser-only 失败、某站点页面变化、需要快速探索或补足结果时，使用 Cloud Agent fallback：
+
+```bash
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli run-agent \
+  --site yahoo_japan \
+  --query-file examples/query.shibuya-google-rent-2ldk.json \
+  --model bu-mini \
+  --max-cost-usd 5 \
+  --out data/raw/yahoo-agent-session-result.json
+```
+
+停止仍在运行的 Agent session：
+
+```bash
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli stop-session \
+  --session-id <agent-session-id>
+```
+
+BYOK/provider key 不写入本仓库，也不通过未公开字段传递。如果 Browser Use 对项目/model 开启 BYOK，请按官方流程在 Browser Use 侧配置，然后在本项目用 `--model` 选择受支持的 model id。
+
+## 本地调试路径
+
+本地 `browser-use` CLI 只用于观察页面、截图和调试站点控件，不产出 canonical schema：
+
+```bash
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli debug-local \
   --site suumo \
-  --query-file examples/query.tokyo-condo.json \
+  --query-file examples/query.shibuya-google-rent-2ldk.json \
   --state \
   --screenshot data/raw/suumo-local-debug.png \
   --out data/raw/suumo-local-debug.json
 ```
 
-如果 CLI 不在 `PATH` 里，也可以直接传路径：
+如果 CLI 不在 `PATH`：
 
 ```bash
-python -m japan_real_estate_data_retriever.cli debug-local \
+PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli debug-local \
   --site suumo \
-  --query-file examples/query.tokyo-condo.json \
+  --query-file examples/query.shibuya-google-rent-2ldk.json \
   --browser-use-cli "$HOME/.browser-use-env/bin/browser-use" \
   --state
 ```
 
-本地 debug 命令使用的是本机 `browser-use open`、`state`、`screenshot` 这类命令。它不会调用 Browser Use Cloud，也不会产出 canonical schema output。它用于检查站点导航、筛选控件、页面标签和截图，然后再更新 workflow。
+## 推荐执行流
 
-生产 Cloud run 需要把真实 API key 放在环境变量或本地 `.env`，不要打印或提交。
+1. 将用户需求规范化为 query JSON。
+2. 按来源站点读取 `skills/japan-real-estate-data-retriever/references/site-*.md`。
+3. 单站点用 `run` 创建 Cloud Browser；多站点用 `run-all`，确保每个来源站点一个独立 Cloud Browser session。
+4. 你的 agent 通过 CDP 按站点 workflow 执行筛选、翻页、详情页抽取；每个 source 先写 raw，再做本地归一化。
+5. 如果出现导航超时或 `TargetClosedError`，先重连同一个 `cdpUrl` 并复用已加载 DOM。
+6. 归一化到 `schemas/unified_listing.schema.json`。
+7. 如果数量不足、站点阻断或字段缺失，先 browser-only 单站重试或调整 workflow。
+8. 仍失败时用 `run-agent` 作为 fallback，并把结果差异写入 workflow 参考文档。
+
+## 最近实测结论
+
+- browser-only 路径可以稳定表达项目主架构，成本更可控，也更适合长期沉淀站点 workflow。
+- 同一个 browser session 跨多个站点运行时，认证页、SPA 超时或 page/context close 可能污染后续站点；因此项目强制每站单开 session。
+- 2026-04-27 的 browser-only isolated 实测中，4 个 source 分别抽取 raw rows：SUUMO 54、at home 172、HOME'S 58、Yahoo 42，最终每站选出 10 条、共 40 条。
+- 同次实测里 at home / HOME'S / Yahoo 初次长流程出现过 `TargetClosedError`，但重连同一个 `cdpUrl` 后页面 DOM 仍可用；因此默认恢复策略是“先重连并复用 DOM”，不是立刻切 Agent。
+- v3 Agent fallback 在 Yahoo Japan 这类 browser-only 不稳定页面上更容易跑通。
+- v3 Agent 的输出数量和字段质量不一定稳定；例如一次实测里 SUUMO/Yahoo 返回 10 条，但 at home/HOME'S 未补满 10 条，且字段质量需要再归一化。
+- 因此本项目默认采用：**browser-only primary，Agent fallback**。
 
 ## 参考文档
 
@@ -125,23 +201,23 @@ python -m japan_real_estate_data_retriever.cli debug-local \
 - `skills/japan-real-estate-data-retriever/references/search-filter-capabilities.md`
 - `skills/japan-real-estate-data-retriever/references/unified-fields.md`
 - `skills/japan-real-estate-data-retriever/references/source-id-strategy.md`
-- `skills/japan-real-estate-data-retriever/references/cloud-probe-findings-2026-04-26.md`
-- `skills/japan-real-estate-data-retriever/references/cloud-search-detail-probe-findings-2026-04-26.md`
 - `skills/japan-real-estate-data-retriever/references/site-suumo.md`
 - `skills/japan-real-estate-data-retriever/references/site-athome.md`
 - `skills/japan-real-estate-data-retriever/references/site-homes.md`
 - `skills/japan-real-estate-data-retriever/references/site-yahoo-japan.md`
 
-Browser Use Cloud v3 使用 `https://api.browser-use.com/api/v3` 和 `X-Browser-Use-API-Key` 请求头。本项目以上线默认路径使用 Browser Use Cloud REST API。本地 Browser Use CLI 调试是独立路径，只驱动本机浏览器。
-
 ## 数据 Schema
 
-当前 canonical schema 是通用 JSON Schema：
+canonical schema：
 
 ```bash
 schemas/unified_listing.schema.json
 ```
 
-skill 内置副本 `skills/japan-real-estate-data-retriever/references/unified_listing.schema.json` 会与根目录 schema 保持同步，用作 agent reference。
+skill 内置副本：
 
-项目 Python package 是 Browser Use payload 生成、云端执行、normalization 的唯一执行层。skill 只保留 agent workflow 和 reference。
+```bash
+skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
+```
+
+根目录 schema 是权威版本。修改 schema 时要同步 skill 内置副本。

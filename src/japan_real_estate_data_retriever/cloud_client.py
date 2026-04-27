@@ -31,16 +31,22 @@ class BrowserUseCloudClient:
         self.timeout_seconds = timeout_seconds
 
     def create_session(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        return self._request("POST", "/sessions", payload)
+        session = self._request("POST", "/sessions", payload)
+        if not session.get("id"):
+            raise BrowserUseCloudError("Browser Use response did not include a session id.")
+        return session
 
     def get_session(self, session_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/sessions/{session_id}")
 
+    def stop_session(self, session_id: str, strategy: str = "session") -> Dict[str, Any]:
+        return self._request("POST", f"/sessions/{session_id}/stop", {"strategy": strategy})
+
     def run_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         session = self.create_session(payload)
-        session_id = session.get("id")
-        if not session_id:
-            raise BrowserUseCloudError("Browser Use response did not include a session id.")
+        session_id = session["id"]
+        if session.get("status") in TERMINAL_STATUSES:
+            return session
 
         deadline = time.monotonic() + self.timeout_seconds
         while time.monotonic() < deadline:
@@ -51,6 +57,20 @@ class BrowserUseCloudClient:
             time.sleep(self.poll_interval)
 
         raise BrowserUseCloudError(f"Timed out waiting for Browser Use session {session_id}.")
+
+    def create_browser(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        browser = self._request("POST", "/browsers", payload)
+        if not browser.get("id"):
+            raise BrowserUseCloudError("Browser Use response did not include a browser session id.")
+        if not browser.get("cdpUrl"):
+            raise BrowserUseCloudError("Browser Use response did not include a CDP URL.")
+        return browser
+
+    def get_browser(self, browser_id: str) -> Dict[str, Any]:
+        return self._request("GET", f"/browsers/{browser_id}")
+
+    def stop_browser(self, browser_id: str) -> Dict[str, Any]:
+        return self._request("PATCH", f"/browsers/{browser_id}", {"action": "stop"})
 
     def _request(
         self,

@@ -1,6 +1,6 @@
 # Search Filter Capabilities
 
-Use this reference before creating a Browser Use task. It tells the agent how to translate a user's natural-language request into website search controls.
+Use this reference before driving a Cloud Browser or creating a fallback Agent task. It tells the local agent how to translate a user's natural-language request into website search controls.
 
 ## Normalized Query Shape
 

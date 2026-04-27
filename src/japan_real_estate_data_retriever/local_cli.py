@@ -43,7 +43,7 @@ def run_local_debug(
         "notes": [
             "This mode uses local browser-use CLI browser commands only.",
             "It is for local workflow debugging and does not produce canonical schema output.",
-            "Use `run` for production Browser Use Cloud extraction.",
+            "Use `run` to create the production Cloud Browser session and workflow context.",
         ],
         "suggested_next_commands": _suggested_commands(cli, session, site.base_url),
     }

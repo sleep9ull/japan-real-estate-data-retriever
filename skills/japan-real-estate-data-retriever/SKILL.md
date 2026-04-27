@@ -5,11 +5,11 @@ description: Retrieve and normalize Japanese real estate listings with Browser U
 
 # Japan Real Estate Data Retriever
 
-Use this skill to turn a Japanese real estate search request into a Browser Use Cloud run that returns stable structured data.
+Use this skill to turn a Japanese real estate search request into a browser-only Cloud Browser workflow driven by the local agent and project references. Use Browser Use Cloud Agent only as fallback, repair, or exploration.
 
 ## Core Workflow
 
-1. Identify the target site or sites: `suumo`, `athome`, `homes`, `yahoo_japan`. If the user says "all sites", run one task per site and merge only after each source result is normalized.
+1. Identify the target site or sites: `suumo`, `athome`, `homes`, `yahoo_japan`. If the user says "all sites", create one independent Cloud Browser session per site and merge only after each source result is normalized.
 2. Read only the references needed for the task:
    - `references/overall-workflow.md` for the end-to-end retrieval flow.
    - `references/search-filter-capabilities.md` for translating user filters to site controls.
@@ -25,12 +25,23 @@ Use this skill to turn a Japanese real estate search request into a Browser Use 
    - `references/cloud-search-detail-probe-findings-2026-04-26.md`
 5. Build a query JSON with area, transaction type, property type, filters, max results, and any user preferences.
 6. Translate user preferences into site filter controls before browsing detail pages. Apply exact filters first; keep soft preferences and grouped filters for ranking/post-filtering.
-7. Build or run through the project CLI in `src/`; it is the single implementation of production payload generation and execution. Use `run` for Browser Use Cloud production runs. Use `debug-local` only for pure local browser debugging with Browser Use CLI.
+7. Build or run through the project CLI in `src/`; it is the single implementation of Cloud Browser creation, fallback Agent sessions, and normalization helpers. Use `run` for the primary browser-only path. Use `run-all` for multi-source browser-only runs. Use `run-agent` only as fallback or workflow discovery. Use `debug-local` only for pure local browser debugging with Browser Use CLI.
 8. Validate output against `schemas/unified_listing.schema.json`.
+
+## Browser-Only Execution Policy
+
+For production-style browser-only runs:
+
+- Treat each source as a short independent worker: connect to its `cdpUrl`, navigate or reuse its current page, extract raw source rows, normalize/rank locally, then stop that browser.
+- If `Page.goto` times out after a source page starts loading, reconnect to the same `cdpUrl` and inspect the existing page before creating a replacement browser.
+- If `Page.evaluate` or `Page.goto` raises `TargetClosedError`, do not assume the source failed permanently. Reconnect to the same `cdpUrl`; if `document.title` and source-specific list selectors are present, reuse the loaded DOM and extract from it.
+- Write per-source raw HTML/JSON before ranking, so normalization and CSV export can be retried without another website load.
+- Create a new Cloud Browser only for the affected source, and only after reconnecting to the current browser fails or the loaded DOM is unusable.
+- Stop every Cloud Browser session at the end of extraction or after unrecoverable failure.
 
 ## Commands
 
-From the repository root, generate a payload without calling Browser Use:
+From the repository root, generate a browser-only Cloud Browser plan without calling Browser Use:
 
 ```bash
 python -m japan_real_estate_data_retriever.cli build-task \
@@ -39,13 +50,38 @@ python -m japan_real_estate_data_retriever.cli build-task \
   --out data/raw/suumo-task.json
 ```
 
-Run through the project CLI. This defaults to Browser Use Cloud REST API:
+Create a Cloud Browser session for the primary browser-only path:
 
 ```bash
 python -m japan_real_estate_data_retriever.cli run \
   --site suumo \
   --query-file examples/query.tokyo-condo.json \
-  --out data/raw/suumo-session-result.json
+  --out data/raw/suumo-browser-session.json
+```
+
+For multiple sources, create isolated sessions with `run-all`:
+
+```bash
+python -m japan_real_estate_data_retriever.cli run-all \
+  --query-file examples/query.tokyo-condo.json \
+  --sources suumo athome homes yahoo_japan \
+  --out data/raw/all-browser-sessions.json
+```
+
+Stop the Cloud Browser after the local agent finishes:
+
+```bash
+python -m japan_real_estate_data_retriever.cli stop-browser \
+  --browser-id <browser-session-id>
+```
+
+Use Browser Use Cloud Agent only as fallback:
+
+```bash
+python -m japan_real_estate_data_retriever.cli run-agent \
+  --site suumo \
+  --query-file examples/query.tokyo-condo.json \
+  --out data/raw/suumo-agent-fallback.json
 ```
 
 Dry-run before dispatching:
@@ -112,4 +148,4 @@ Treat the root schema as authoritative. Keep the bundled copy in sync when packa
 - Capture source-specific raw labels in `raw` whenever mapping is uncertain.
 - Fill unknown scalar fields with `null`; fill unknown arrays with `[]`.
 - Keep source identity on every item. Never merge listings from different sites by raw ID alone.
-- Use Japan proxy (`proxyCountryCode: "jp"`) for Browser Use Cloud sessions.
+- Use Japan proxy (`proxyCountryCode: "jp"`) for Cloud Browser and fallback Agent sessions.
