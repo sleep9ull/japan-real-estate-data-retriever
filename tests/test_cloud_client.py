@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -6,6 +8,7 @@ from japan_real_estate_data_retriever.cloud_client import (
     BrowserUseCloudClient,
     BrowserUseCloudError,
     TERMINAL_STATUSES,
+    get_auth_status,
     _load_api_key,
     _normalize_backend,
 )
@@ -15,6 +18,19 @@ class CloudClientTest(unittest.TestCase):
     def test_load_api_key_prefers_environment(self):
         with patch.dict(os.environ, {"BROWSER_USE_API_KEY": "from-env"}):
             self.assertEqual(_load_api_key(), "from-env")
+
+    def test_load_api_key_reads_user_config_before_project_env(self):
+        with tempfile.TemporaryDirectory() as home:
+            config_dir = Path(home) / ".jreretrieve"
+            config_dir.mkdir()
+            (config_dir / "config.toml").write_text(
+                'browser_use_api_key = "from-config"\n',
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {"HOME": home}, clear=True):
+                self.assertEqual(_load_api_key(), "from-config")
+                self.assertEqual(get_auth_status()["source"], "config")
 
     def test_default_cloud_backend_uses_rest_api(self):
         with patch.dict(os.environ, {"BROWSER_USE_API_KEY": "from-env"}):

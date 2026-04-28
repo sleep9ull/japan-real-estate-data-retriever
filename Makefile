@@ -1,12 +1,16 @@
-.PHONY: install-local test smoke
+.PHONY: sync install-local test smoke
+
+sync:
+	uv sync
 
 install-local:
 	uv tool install --editable . --force
 
 test:
-	PYTHONPATH=src python3 -m unittest discover -s tests
+	uv run python -m unittest discover -s tests
 
 smoke:
-	jreretrieve --help
-	jreretrieve --json doctor
-	jreretrieve --json sources list
+	command -v jreretrieve
+	cd /tmp && jreretrieve --help
+	cd /tmp && jreretrieve --json doctor
+	cd /tmp && jreretrieve --json sources list

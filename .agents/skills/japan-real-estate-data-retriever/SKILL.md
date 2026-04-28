@@ -9,33 +9,35 @@ Use this skill to turn a Japanese real estate search request into a browser-only
 
 ## Core Workflow
 
-1. Verify the installed command and local setup first:
+1. Verify the installed CLI and uv-managed local setup first:
    ```bash
-   command -v jreretrieve || true
+   uv sync
+   command -v jreretrieve || make install-local
    jreretrieve --json doctor
    ```
-2. Identify the target site or sites with the CLI: `jreretrieve --json sources list` or `jreretrieve --json sources resolve <name>`. Fixed source ids are `suumo`, `athome`, `homes`, `yahoo_japan`. If the user says "all sites", create one independent Cloud Browser session per site and merge only after each source result is normalized.
-3. Validate query JSON before live work:
+2. Confirm auth is configured through `BROWSER_USE_API_KEY`, `~/.jreretrieve/config.toml`, or the project `.env`. `doctor --json` reports only the auth source category (`env`, `config`, `project_env`, or `missing`) and must never print token values.
+3. Identify the target site or sites with the CLI: `jreretrieve --json sources list` or `jreretrieve --json sources resolve <name>`. Fixed source ids are `suumo`, `athome`, `homes`, `yahoo_japan`. If the user says "all sites", create one independent Cloud Browser session per site and merge only after each source result is normalized.
+4. Validate query JSON before live work:
    ```bash
    jreretrieve --json schema validate --name query --file <query-file>
    ```
-4. Read only the references needed for the task:
+5. Read only the references needed for the task:
    - `references/overall-workflow.md` for the end-to-end retrieval flow.
    - `references/search-filter-capabilities.md` for translating user filters to site controls.
    - `references/unified-fields.md` for field mapping questions.
    - `references/source-id-strategy.md` for listing ID decisions.
-5. Read the relevant site reference:
+6. Read the relevant site reference:
    - `references/site-suumo.md`
    - `references/site-athome.md`
    - `references/site-homes.md`
    - `references/site-yahoo-japan.md`
-6. For Browser Use Cloud behavior or known site interaction limits, read:
+7. For Browser Use Cloud behavior or known site interaction limits, read:
    - `references/cloud-probe-findings-2026-04-26.md`
    - `references/cloud-search-detail-probe-findings-2026-04-26.md`
-7. Build a query JSON with area, transaction type, property type, filters, max results, and any user preferences.
-8. Translate user preferences into site filter controls before browsing detail pages. Apply exact filters first; keep soft preferences and grouped filters for ranking/post-filtering.
-9. Build or run through `jreretrieve`; it is the single implementation of Cloud Browser creation, fallback Agent sessions, and normalization helpers. Use `run` for the primary browser-only path. Use `run-all` for multi-source browser-only runs. Use `run-agent` only as fallback or workflow discovery. Use `debug-local` only for pure local browser debugging with Browser Use CLI.
-10. Validate output against `schemas/unified_listing.schema.json`:
+8. Build a query JSON with area, transaction type, property type, filters, max results, and any user preferences.
+9. Translate user preferences into site filter controls before browsing detail pages. Apply exact filters first; keep soft preferences and grouped filters for ranking/post-filtering.
+10. Build or run through installed `jreretrieve`; it is the single implementation of Cloud Browser creation, fallback Agent sessions, and normalization helpers. Use `run --dry-run` or `run-all --dry-run` before live browser creation when checking payloads. Use `run` for the primary browser-only path. Use `run-all` for multi-source browser-only runs. Use `run-agent` only as fallback or workflow discovery. Use `debug-local` only for pure local browser debugging with Browser Use CLI.
+11. Validate output against `schemas/unified_listing.schema.json`:
    ```bash
    jreretrieve --json schema validate --name unified-listing --file <output-file>
    ```
@@ -152,7 +154,7 @@ When debugging an environment where `PATH` is not reliable, set `BROWSER_USE_CLI
 
 Local CLI debugging uses local `browser-use open/state/screenshot` style commands. It does not call Browser Use Cloud and does not produce canonical schema output.
 
-Never print or commit `BROWSER_USE_API_KEY`. Ask the user to provide secrets through environment variables only.
+Never print or commit `BROWSER_USE_API_KEY`. Ask the user to provide secrets through environment variables or `~/.jreretrieve/config.toml`.
 
 ## Output Contract
 
@@ -179,11 +181,13 @@ Treat the root schema as authoritative. Keep the bundled copy in sync when packa
 
 ## Raw Escape Hatch
 
-Use only read-only raw requests unless the user explicitly asks for a live write:
+Use the high-level commands first. Use only read-only raw requests unless the user explicitly asks for a live write:
 
 ```bash
 jreretrieve --json request get /browsers/<browser-id>
 ```
+
+Do not add raw POST/PATCH/DELETE operations or run broad live actions unless the user explicitly requests that write. Prefer `--dry-run` for payload review.
 
 ## Implementation Boundary
 

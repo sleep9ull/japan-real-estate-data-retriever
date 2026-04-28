@@ -92,7 +92,9 @@ class BrowserUseCloudClient:
         payload: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         if not self.api_key:
-            raise BrowserUseCloudError("BROWSER_USE_API_KEY is required for REST backend.")
+            raise BrowserUseCloudError(
+                "Browser Use API key is required. Set BROWSER_USE_API_KEY or ~/.jreretrieve/config.toml."
+            )
 
         data = None
         headers = {
@@ -152,6 +154,7 @@ def get_auth_status() -> Dict[str, Any]:
         "available": source != "missing",
         "source": source,
         "env_var": "BROWSER_USE_API_KEY",
+        "config_path": str(_user_config_path()),
     }
 
 
@@ -164,6 +167,10 @@ def _load_env_value_with_source(name: str) -> Tuple[Optional[str], str]:
     env_value = os.environ.get(name)
     if env_value:
         return env_value, "env"
+
+    config_value = _load_config_value(name)
+    if config_value:
+        return config_value, "config"
 
     env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
@@ -178,3 +185,26 @@ def _load_env_value_with_source(name: str) -> Tuple[Optional[str], str]:
             loaded = value.strip().strip('"').strip("'") or None
             return loaded, "project_env" if loaded else "missing"
     return None, "missing"
+
+
+def _user_config_path() -> Any:
+    return os.path.expanduser("~/.jreretrieve/config.toml")
+
+
+def _load_config_value(name: str) -> Optional[str]:
+    path = _user_config_path()
+    if not os.path.exists(path):
+        return None
+
+    key_aliases = {name, name.lower(), name.lower().replace("_", "-")}
+    with open(path, "r", encoding="utf-8") as file:
+        for line in file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            normalized_key = key.strip().strip('"').strip("'")
+            if normalized_key in key_aliases:
+                loaded = value.strip().strip('"').strip("'")
+                return loaded or None
+    return None
