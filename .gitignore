@@ -8,9 +8,11 @@ __pycache__/
 .env
 .env.*
 !.env.example
-data/raw/*.json
-data/raw/local-debug/
-data/normalized/*.json
-data/normalized/*.csv
+
+# Generated retrieval artifacts
+data/raw/*
+!data/raw/.gitkeep
+data/normalized/*
+!data/normalized/.gitkeep
 data/exports/
 *.log
