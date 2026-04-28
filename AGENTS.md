@@ -23,4 +23,4 @@ This project retrieves Japanese real estate transaction/listing data and normali
 - The fixed source identifiers are `suumo`, `athome`, `homes`, and `yahoo_japan`.
 - The storage primary key is source-aware: use `source:source_listing_id`; when no source listing ID exists, use `source:url:<sha256-prefix>`.
 - All normalized output must conform to the canonical JSON Schema at `schemas/unified_listing.schema.json`.
-- Site workflows and field mappings live in `skills/japan-real-estate-data-retriever/references/site-*.md`.
+- Site workflows and field mappings live in `.agents/skills/japan-real-estate-data-retriever/references/site-*.md`.

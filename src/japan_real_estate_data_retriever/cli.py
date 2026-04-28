@@ -1,24 +1,59 @@
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from .cloud_client import BrowserUseCloudClient, BrowserUseCloudError
+from . import __version__
+from .cloud_client import BrowserUseCloudClient, BrowserUseCloudError, get_auth_status
 from .local_cli import BrowserUseLocalCliError, run_local_debug, write_debug_result
+from .paths import PROJECT_ROOT, REFERENCES_DIR, SCHEMAS_DIR, SKILL_DIR
 from .prompt_builder import (
     build_agent_session_payload,
     build_browser_session_payload,
     build_browser_workflow_payload,
+    build_local_agent_context,
     build_multi_source_browser_workflow_payload,
     write_payload,
 )
-from .sites import site_choices
+from .schema_loader import load_schema, validate_json_document
+from .sites import get_site, site_choices
 
 
 def main(argv: list = None) -> int:
     parser = argparse.ArgumentParser(description="Japan real estate data retriever Browser Use runner.")
+    parser.add_argument("--json", action="store_true", help="Emit stable JSON for agent consumption.")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("doctor", help="Check local setup, auth source, schemas, and skill files.")
+
+    sources_parser = subparsers.add_parser("sources", help="Discover or resolve supported source sites.")
+    sources_subparsers = sources_parser.add_subparsers(dest="sources_command", required=True)
+    sources_subparsers.add_parser("list", help="List supported sources.")
+    source_get_parser = sources_subparsers.add_parser("get", help="Read one supported source.")
+    source_get_parser.add_argument("source", help="Source id, display name, or alias.")
+    source_resolve_parser = sources_subparsers.add_parser("resolve", help="Resolve a site name or alias to a source id.")
+    source_resolve_parser.add_argument("query", help="Source id, display name, or alias.")
+
+    workflow_parser = subparsers.add_parser("workflow", help="Read local workflow context without creating a browser.")
+    workflow_subparsers = workflow_parser.add_subparsers(dest="workflow_command", required=True)
+    workflow_show_parser = workflow_subparsers.add_parser("show", help="Show workflow context for one source.")
+    workflow_show_parser.add_argument("--site", choices=site_choices(), required=True)
+    workflow_show_parser.add_argument("--query-file", type=Path, help="Optional query JSON to embed in the workflow context.")
+
+    schema_parser = subparsers.add_parser("schema", help="Show or validate project JSON schemas.")
+    schema_subparsers = schema_parser.add_subparsers(dest="schema_command", required=True)
+    schema_show_parser = schema_subparsers.add_parser("show", help="Show a canonical schema.")
+    schema_show_parser.add_argument("--name", choices=("unified-listing", "query"), default="unified-listing")
+    schema_validate_parser = schema_subparsers.add_parser("validate", help="Validate a JSON file against a project schema.")
+    schema_validate_parser.add_argument("--name", choices=("unified-listing", "query"), default="unified-listing")
+    schema_validate_parser.add_argument("--file", type=Path, required=True)
+
+    request_parser = subparsers.add_parser("request", help="Raw read-only Browser Use REST escape hatch.")
+    request_subparsers = request_parser.add_subparsers(dest="request_command", required=True)
+    request_get_parser = request_subparsers.add_parser("get", help="Run an authenticated GET request against the Browser Use v3 API.")
+    request_get_parser.add_argument("path", help="API path, for example /browsers/<id> or /sessions/<id>.")
 
     build_parser = subparsers.add_parser(
         "build-task",
@@ -88,6 +123,21 @@ def main(argv: list = None) -> int:
     debug_parser.add_argument("--out", type=Path, help="Write local debug result JSON to this path.")
 
     args = parser.parse_args(argv)
+
+    if args.command == "doctor":
+        return _handle_doctor(args)
+
+    if args.command == "sources":
+        return _handle_sources(args)
+
+    if args.command == "workflow":
+        return _handle_workflow(args)
+
+    if args.command == "schema":
+        return _handle_schema(args)
+
+    if args.command == "request":
+        return _handle_request(args)
 
     if args.command == "build-task":
         query = _read_json(args.query_file)
@@ -263,6 +313,115 @@ def main(argv: list = None) -> int:
     return 2
 
 
+def _handle_doctor(args: argparse.Namespace) -> int:
+    browser_use_cli = shutil.which("browser-use") or str(Path.home() / ".browser-use-env" / "bin" / "browser-use")
+    browser_use_cli_available = Path(browser_use_cli).is_file() if browser_use_cli else False
+    result = {
+        "ok": True,
+        "tool": "jreretrieve",
+        "version": __version__,
+        "project_root": str(PROJECT_ROOT),
+        "auth": get_auth_status(),
+        "paths": {
+            "skill_dir": _path_status(SKILL_DIR),
+            "references_dir": _path_status(REFERENCES_DIR),
+            "schemas_dir": _path_status(SCHEMAS_DIR),
+            "unified_listing_schema": _path_status(SCHEMAS_DIR / "unified_listing.schema.json"),
+            "query_schema": _path_status(SCHEMAS_DIR / "query.schema.json"),
+        },
+        "commands": {
+            "browser_use_cli": {
+                "available": browser_use_cli_available,
+                "path": browser_use_cli if browser_use_cli_available else None,
+                "required_for": "debug-local only",
+            },
+        },
+        "network": {
+            "checked": False,
+            "reason": "doctor does not call live APIs by default",
+        },
+    }
+    result["ok"] = all(item["exists"] for item in result["paths"].values())
+    _emit(args, result, human_lines=[
+        f"jreretrieve {__version__}",
+        f"project root: {PROJECT_ROOT}",
+        f"auth: {result['auth']['source']}",
+        f"skill: {'ok' if result['paths']['skill_dir']['exists'] else 'missing'}",
+        f"schemas: {'ok' if result['paths']['schemas_dir']['exists'] else 'missing'}",
+        f"browser-use CLI: {'available' if browser_use_cli_available else 'not found'}",
+    ])
+    return 0 if result["ok"] else 1
+
+
+def _handle_sources(args: argparse.Namespace) -> int:
+    if args.sources_command == "list":
+        sources = [_site_payload(source) for source in site_choices()]
+        _emit(args, {"sources": sources}, human_lines=[f"{item['source']}\t{item['display_name']}\t{item['base_url']}" for item in sources])
+        return 0
+
+    query = args.source if args.sources_command == "get" else args.query
+    source = _resolve_source(query)
+    if not source:
+        return _emit_error(args, f"Could not resolve source: {query}", code=1)
+    payload = _site_payload(source)
+    _emit(args, payload, human_lines=[f"{payload['source']}\t{payload['display_name']}\t{payload['base_url']}"])
+    return 0
+
+
+def _handle_workflow(args: argparse.Namespace) -> int:
+    if args.workflow_command != "show":
+        return _emit_error(args, "Unsupported workflow command.", code=2)
+    query = _read_json(args.query_file) if args.query_file else {}
+    payload = build_local_agent_context(args.site, query)
+    _emit(args, payload, human_lines=[
+        f"source: {payload['source']}",
+        f"site: {payload['site']['displayName']}",
+        f"workflow reference: {payload['site']['workflowReference']}",
+        "Use --json to read the full workflow context.",
+    ])
+    return 0
+
+
+def _handle_schema(args: argparse.Namespace) -> int:
+    schema = load_schema(args.name)
+    if args.schema_command == "show":
+        _emit(args, schema, human_lines=[
+            f"name: {args.name}",
+            f"title: {schema.get('title')}",
+            f"schema: {schema.get('$schema')}",
+        ])
+        return 0
+
+    if args.schema_command == "validate":
+        document = _read_json(args.file)
+        errors = validate_json_document(document, schema)
+        payload = {
+            "ok": not errors,
+            "schema": args.name,
+            "file": str(args.file),
+            "errors": errors,
+        }
+        _emit(args, payload, human_lines=[
+            f"{args.file}: {'valid' if not errors else 'invalid'}",
+            *[f"{error['path']}: {error['message']}" for error in errors[:20]],
+        ])
+        return 0 if not errors else 1
+
+    return _emit_error(args, "Unsupported schema command.", code=2)
+
+
+def _handle_request(args: argparse.Namespace) -> int:
+    if args.request_command != "get":
+        return _emit_error(args, "Only read-only request get is supported.", code=2)
+    client = BrowserUseCloudClient()
+    try:
+        result = client.raw_get(args.path)
+    except BrowserUseCloudError as exc:
+        return _emit_error(args, str(exc), code=1)
+    _emit(args, result, human_lines=[json.dumps(result, ensure_ascii=False, indent=2)])
+    return 0
+
+
 def _add_site_query_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--site", choices=site_choices(), required=True)
     parser.add_argument("--query-file", type=Path, required=True)
@@ -375,6 +534,64 @@ def _resolve_sources(cli_sources: Any, query: Dict[str, Any]) -> list:
     if isinstance(query_sources, list) and query_sources:
         return [str(source) for source in query_sources]
     return list(site_choices())
+
+
+def _resolve_source(query: str) -> str:
+    normalized = query.strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "yahoo": "yahoo_japan",
+        "yahoo_japan_real_estate": "yahoo_japan",
+        "yahoo不動産": "yahoo_japan",
+        "lifull": "homes",
+        "lifull_homes": "homes",
+        "home's": "homes",
+        "athome": "athome",
+        "at_home": "athome",
+    }
+    if normalized in site_choices():
+        return normalized
+    if normalized in aliases:
+        return aliases[normalized]
+    for source in site_choices():
+        site = get_site(source)
+        display = site.display_name.lower().replace(" ", "_")
+        if normalized == display or normalized in display:
+            return source
+    return ""
+
+
+def _site_payload(source: str) -> Dict[str, str]:
+    site = get_site(source)
+    return {
+        "source": site.source,
+        "display_name": site.display_name,
+        "base_url": site.base_url,
+        "workflow_reference": site.workflow_reference,
+    }
+
+
+def _path_status(path: Path) -> Dict[str, Any]:
+    return {
+        "path": str(path),
+        "exists": path.exists(),
+        "kind": "directory" if path.is_dir() else "file" if path.is_file() else "missing",
+    }
+
+
+def _emit(args: argparse.Namespace, payload: Dict[str, Any], human_lines: list = None) -> None:
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    for line in human_lines or [json.dumps(payload, ensure_ascii=False, indent=2)]:
+        print(line)
+
+
+def _emit_error(args: argparse.Namespace, message: str, code: int = 1) -> int:
+    if args.json:
+        print(json.dumps({"ok": False, "error": {"message": message}}, ensure_ascii=False, indent=2))
+    else:
+        print(f"error: {message}", file=sys.stderr)
+    return code
 
 
 if __name__ == "__main__":

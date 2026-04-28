@@ -9,24 +9,36 @@ Use this skill to turn a Japanese real estate search request into a browser-only
 
 ## Core Workflow
 
-1. Identify the target site or sites: `suumo`, `athome`, `homes`, `yahoo_japan`. If the user says "all sites", create one independent Cloud Browser session per site and merge only after each source result is normalized.
-2. Read only the references needed for the task:
+1. Verify the installed command and local setup first:
+   ```bash
+   command -v jreretrieve || true
+   jreretrieve --json doctor
+   ```
+2. Identify the target site or sites with the CLI: `jreretrieve --json sources list` or `jreretrieve --json sources resolve <name>`. Fixed source ids are `suumo`, `athome`, `homes`, `yahoo_japan`. If the user says "all sites", create one independent Cloud Browser session per site and merge only after each source result is normalized.
+3. Validate query JSON before live work:
+   ```bash
+   jreretrieve --json schema validate --name query --file <query-file>
+   ```
+4. Read only the references needed for the task:
    - `references/overall-workflow.md` for the end-to-end retrieval flow.
    - `references/search-filter-capabilities.md` for translating user filters to site controls.
    - `references/unified-fields.md` for field mapping questions.
    - `references/source-id-strategy.md` for listing ID decisions.
-3. Read the relevant site reference:
+5. Read the relevant site reference:
    - `references/site-suumo.md`
    - `references/site-athome.md`
    - `references/site-homes.md`
    - `references/site-yahoo-japan.md`
-4. For Browser Use Cloud behavior or known site interaction limits, read:
+6. For Browser Use Cloud behavior or known site interaction limits, read:
    - `references/cloud-probe-findings-2026-04-26.md`
    - `references/cloud-search-detail-probe-findings-2026-04-26.md`
-5. Build a query JSON with area, transaction type, property type, filters, max results, and any user preferences.
-6. Translate user preferences into site filter controls before browsing detail pages. Apply exact filters first; keep soft preferences and grouped filters for ranking/post-filtering.
-7. Build or run through the project CLI in `src/`; it is the single implementation of Cloud Browser creation, fallback Agent sessions, and normalization helpers. Use `run` for the primary browser-only path. Use `run-all` for multi-source browser-only runs. Use `run-agent` only as fallback or workflow discovery. Use `debug-local` only for pure local browser debugging with Browser Use CLI.
-8. Validate output against `schemas/unified_listing.schema.json`.
+7. Build a query JSON with area, transaction type, property type, filters, max results, and any user preferences.
+8. Translate user preferences into site filter controls before browsing detail pages. Apply exact filters first; keep soft preferences and grouped filters for ranking/post-filtering.
+9. Build or run through `jreretrieve`; it is the single implementation of Cloud Browser creation, fallback Agent sessions, and normalization helpers. Use `run` for the primary browser-only path. Use `run-all` for multi-source browser-only runs. Use `run-agent` only as fallback or workflow discovery. Use `debug-local` only for pure local browser debugging with Browser Use CLI.
+10. Validate output against `schemas/unified_listing.schema.json`:
+   ```bash
+   jreretrieve --json schema validate --name unified-listing --file <output-file>
+   ```
 
 ## Browser-Only Execution Policy
 
@@ -41,10 +53,39 @@ For production-style browser-only runs:
 
 ## Commands
 
+Check setup:
+
+```bash
+jreretrieve --json doctor
+```
+
+Discover and resolve sources:
+
+```bash
+jreretrieve --json sources list
+jreretrieve --json sources resolve lifull
+```
+
+Validate a query before creating live Cloud Browser sessions:
+
+```bash
+jreretrieve --json schema validate \
+  --name query \
+  --file examples/query.tokyo-condo.json
+```
+
+Read workflow context without creating a Cloud Browser:
+
+```bash
+jreretrieve --json workflow show \
+  --site suumo \
+  --query-file examples/query.tokyo-condo.json
+```
+
 From the repository root, generate a browser-only Cloud Browser plan without calling Browser Use:
 
 ```bash
-python -m japan_real_estate_data_retriever.cli build-task \
+jreretrieve build-task \
   --site suumo \
   --query-file examples/query.tokyo-condo.json \
   --out data/raw/suumo-task.json
@@ -53,7 +94,7 @@ python -m japan_real_estate_data_retriever.cli build-task \
 Create a Cloud Browser session for the primary browser-only path:
 
 ```bash
-python -m japan_real_estate_data_retriever.cli run \
+jreretrieve run \
   --site suumo \
   --query-file examples/query.tokyo-condo.json \
   --out data/raw/suumo-browser-session.json
@@ -62,7 +103,7 @@ python -m japan_real_estate_data_retriever.cli run \
 For multiple sources, create isolated sessions with `run-all`:
 
 ```bash
-python -m japan_real_estate_data_retriever.cli run-all \
+jreretrieve run-all \
   --query-file examples/query.tokyo-condo.json \
   --sources suumo athome homes yahoo_japan \
   --out data/raw/all-browser-sessions.json
@@ -71,14 +112,14 @@ python -m japan_real_estate_data_retriever.cli run-all \
 Stop the Cloud Browser after the local agent finishes:
 
 ```bash
-python -m japan_real_estate_data_retriever.cli stop-browser \
+jreretrieve stop-browser \
   --browser-id <browser-session-id>
 ```
 
 Use Browser Use Cloud Agent only as fallback:
 
 ```bash
-python -m japan_real_estate_data_retriever.cli run-agent \
+jreretrieve run-agent \
   --site suumo \
   --query-file examples/query.tokyo-condo.json \
   --out data/raw/suumo-agent-fallback.json
@@ -87,7 +128,7 @@ python -m japan_real_estate_data_retriever.cli run-agent \
 Dry-run before dispatching:
 
 ```bash
-python -m japan_real_estate_data_retriever.cli run \
+jreretrieve run \
   --site suumo \
   --query-file examples/query.tokyo-condo.json \
   --dry-run
@@ -97,7 +138,7 @@ Use the local Browser Use CLI only when debugging local browser behavior:
 
 ```bash
 browser-use doctor
-python -m japan_real_estate_data_retriever.cli debug-local \
+jreretrieve debug-local \
   --site suumo \
   --query-file examples/query.tokyo-condo.json \
   --state \
@@ -130,16 +171,26 @@ Each item must use `id = source:source_listing_id` when a site listing ID exists
 Use the generic JSON Schema as the canonical data contract:
 
 - `schemas/unified_listing.schema.json`
+- `schemas/query.schema.json`
 - bundled reference copy: `references/unified_listing.schema.json`
+- bundled query schema copy: `references/query.schema.json`
 
 Treat the root schema as authoritative. Keep the bundled copy in sync when packaging or changing the schema.
+
+## Raw Escape Hatch
+
+Use only read-only raw requests unless the user explicitly asks for a live write:
+
+```bash
+jreretrieve --json request get /browsers/<browser-id>
+```
 
 ## Implementation Boundary
 
 - Keep executable retrieval, payload generation, REST calls, and normalization in `src/japan_real_estate_data_retriever/`.
 - Keep this skill focused on agent instructions and domain references.
 - Do not add skill scripts that duplicate project Python package behavior.
-- Use `skills/references/` for detailed site workflow, mapping, and probe notes so SKILL.md stays small.
+- Use `references/` for detailed site workflow, mapping, and probe notes so SKILL.md stays small.
 
 ## Site Notes
 

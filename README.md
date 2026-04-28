@@ -25,7 +25,7 @@ This is a workflow-first project for retrieving Japanese real estate listings. B
 
 ```text
 .
-├── skills/japan-real-estate-data-retriever/
+├── .agents/skills/japan-real-estate-data-retriever/
 │   ├── SKILL.md
 │   └── references/
 ├── schemas/unified_listing.schema.json
@@ -52,6 +52,49 @@ source .venv/bin/activate
 python -m pip install -e .
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
+
+Install the agent-native CLI on PATH:
+
+```bash
+make install-local
+jreretrieve --help
+jreretrieve --json doctor
+```
+
+`make install-local` uses `uv tool install --editable . --force`, which works with this `pyproject.toml` package even when the system `pip` is too old for editable PEP 517 installs.
+
+## Agent-Friendly CLI
+
+Use `jreretrieve` as the stable command layer from any repository. Prefer `--json` for Codex or other agents.
+
+Discovery and setup:
+
+```bash
+jreretrieve --json doctor
+jreretrieve --json sources list
+jreretrieve --json sources resolve lifull
+```
+
+Read local contracts without starting a browser:
+
+```bash
+jreretrieve --json schema show --name unified-listing
+jreretrieve --json schema validate --name query --file examples/query.shibuya-google-rent-2ldk.json
+jreretrieve --json workflow show --site suumo --query-file examples/query.shibuya-google-rent-2ldk.json
+```
+
+Raw read-only Browser Use API escape hatch:
+
+```bash
+jreretrieve --json request get /browsers/<browser-id>
+```
+
+JSON policy:
+
+- `--json` writes machine-readable JSON to stdout only.
+- Errors under `--json` use `{"ok": false, "error": {"message": "..."}}` and never include credentials.
+- `doctor` reports the auth source category (`env`, `project_env`, or `missing`) without printing token values.
+- `request get` returns the Browser Use API response object; live writes are intentionally not exposed through the raw escape hatch.
 
 ## Primary Browser-Only Path
 
@@ -158,7 +201,7 @@ PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli debug-local \
 ## Recommended Flow
 
 1. Normalize the user request into query JSON.
-2. Load the relevant `skills/japan-real-estate-data-retriever/references/site-*.md` workflow.
+2. Load the relevant `.agents/skills/japan-real-estate-data-retriever/references/site-*.md` workflow.
 3. Use `run` for a single source or `run-all` for multi-source jobs; multi-source jobs must use one Cloud Browser session per source.
 4. Let your agent drive CDP according to the workflow: filters, pagination, detail pages, extraction; write per-source raw data before normalization.
 5. On navigation timeouts or `TargetClosedError`, reconnect to the same `cdpUrl` and reuse any loaded DOM before replacing the browser.
@@ -177,7 +220,7 @@ schemas/unified_listing.schema.json
 Bundled skill copy:
 
 ```bash
-skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
+.agents/skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
 ```
 
 The root schema is authoritative.

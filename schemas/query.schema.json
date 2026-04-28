@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/query.schema.json",
+  "title": "JapaneseRealEstateSearchQuery",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "transaction_type": { "type": ["string", "null"] },
+    "property_type": { "type": ["string", "null"] },
+    "area": { "type": "object" },
+    "filters": { "type": "object" },
+    "preferences": { "type": "object" },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["suumo", "athome", "homes", "yahoo_japan"] }
+    },
+    "max_results": { "type": "integer" },
+    "max_results_per_source": { "type": "integer" }
+  }
+}

@@ -3,7 +3,7 @@ import os
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from .paths import PROJECT_ROOT
 
@@ -72,6 +72,11 @@ class BrowserUseCloudClient:
     def stop_browser(self, browser_id: str) -> Dict[str, Any]:
         return self._request("PATCH", f"/browsers/{browser_id}", {"action": "stop"})
 
+    def raw_get(self, path: str) -> Dict[str, Any]:
+        if not path.startswith("/"):
+            path = "/" + path
+        return self._request("GET", path)
+
     def _request(
         self,
         method: str,
@@ -137,17 +142,32 @@ def _normalize_backend(backend: str) -> str:
 
 
 def _load_api_key() -> Optional[str]:
-    return _load_env_value("BROWSER_USE_API_KEY")
+    value, _source = _load_env_value_with_source("BROWSER_USE_API_KEY")
+    return value
+
+
+def get_auth_status() -> Dict[str, Any]:
+    _value, source = _load_env_value_with_source("BROWSER_USE_API_KEY")
+    return {
+        "available": source != "missing",
+        "source": source,
+        "env_var": "BROWSER_USE_API_KEY",
+    }
 
 
 def _load_env_value(name: str) -> Optional[str]:
+    value, _source = _load_env_value_with_source(name)
+    return value
+
+
+def _load_env_value_with_source(name: str) -> Tuple[Optional[str], str]:
     env_value = os.environ.get(name)
     if env_value:
-        return env_value
+        return env_value, "env"
 
     env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
-        return None
+        return None, "missing"
 
     for line in env_path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
@@ -155,5 +175,6 @@ def _load_env_value(name: str) -> Optional[str]:
             continue
         key, value = stripped.split("=", 1)
         if key.strip() == name:
-            return value.strip().strip('"').strip("'") or None
-    return None
+            loaded = value.strip().strip('"').strip("'") or None
+            return loaded, "project_env" if loaded else "missing"
+    return None, "missing"

@@ -25,7 +25,7 @@
 
 ```text
 .
-├── skills/japan-real-estate-data-retriever/      # Codex skill 与站点 workflow
+├── .agents/skills/japan-real-estate-data-retriever/ # Codex skill 与站点 workflow
 │   ├── SKILL.md
 │   └── references/                               # site-*.md、字段映射、探测记录
 ├── schemas/unified_listing.schema.json           # canonical JSON Schema
@@ -52,6 +52,49 @@ source .venv/bin/activate
 python -m pip install -e .
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
+
+把 agent-native CLI 安装到 PATH：
+
+```bash
+make install-local
+jreretrieve --help
+jreretrieve --json doctor
+```
+
+`make install-local` 使用 `uv tool install --editable . --force`，即使系统 `pip` 太旧、不支持当前 `pyproject.toml` 的 editable PEP 517 安装，也可以正常安装。
+
+## Agent 友好的 CLI
+
+从任意仓库调用时，优先使用 `jreretrieve` 作为稳定命令层；给 Codex 或其他 agent 使用时优先加 `--json`。
+
+发现与环境检查：
+
+```bash
+jreretrieve --json doctor
+jreretrieve --json sources list
+jreretrieve --json sources resolve lifull
+```
+
+不启动浏览器，读取本地契约：
+
+```bash
+jreretrieve --json schema show --name unified-listing
+jreretrieve --json schema validate --name query --file examples/query.shibuya-google-rent-2ldk.json
+jreretrieve --json workflow show --site suumo --query-file examples/query.shibuya-google-rent-2ldk.json
+```
+
+只读 Browser Use API 逃生口：
+
+```bash
+jreretrieve --json request get /browsers/<browser-id>
+```
+
+JSON 约定：
+
+- `--json` 只向 stdout 输出机器可读 JSON。
+- `--json` 下的错误形如 `{"ok": false, "error": {"message": "..."}}`，且不会包含凭证。
+- `doctor` 只报告 auth 来源类别：`env`、`project_env` 或 `missing`，不打印 token。
+- `request get` 返回 Browser Use API 原始响应对象；raw escape hatch 暂不提供 live write。
 
 可选：仅在本地浏览器调试时安装 Browser Use CLI：
 
@@ -176,7 +219,7 @@ PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli debug-local \
 ## 推荐执行流
 
 1. 将用户需求规范化为 query JSON。
-2. 按来源站点读取 `skills/japan-real-estate-data-retriever/references/site-*.md`。
+2. 按来源站点读取 `.agents/skills/japan-real-estate-data-retriever/references/site-*.md`。
 3. 单站点用 `run` 创建 Cloud Browser；多站点用 `run-all`，确保每个来源站点一个独立 Cloud Browser session。
 4. 你的 agent 通过 CDP 按站点 workflow 执行筛选、翻页、详情页抽取；每个 source 先写 raw，再做本地归一化。
 5. 如果出现导航超时或 `TargetClosedError`，先重连同一个 `cdpUrl` 并复用已加载 DOM。
@@ -186,15 +229,15 @@ PYTHONPATH=src python3 -m japan_real_estate_data_retriever.cli debug-local \
 
 ## 参考文档
 
-- `skills/japan-real-estate-data-retriever/SKILL.md`
-- `skills/japan-real-estate-data-retriever/references/overall-workflow.md`
-- `skills/japan-real-estate-data-retriever/references/search-filter-capabilities.md`
-- `skills/japan-real-estate-data-retriever/references/unified-fields.md`
-- `skills/japan-real-estate-data-retriever/references/source-id-strategy.md`
-- `skills/japan-real-estate-data-retriever/references/site-suumo.md`
-- `skills/japan-real-estate-data-retriever/references/site-athome.md`
-- `skills/japan-real-estate-data-retriever/references/site-homes.md`
-- `skills/japan-real-estate-data-retriever/references/site-yahoo-japan.md`
+- `.agents/skills/japan-real-estate-data-retriever/SKILL.md`
+- `.agents/skills/japan-real-estate-data-retriever/references/overall-workflow.md`
+- `.agents/skills/japan-real-estate-data-retriever/references/search-filter-capabilities.md`
+- `.agents/skills/japan-real-estate-data-retriever/references/unified-fields.md`
+- `.agents/skills/japan-real-estate-data-retriever/references/source-id-strategy.md`
+- `.agents/skills/japan-real-estate-data-retriever/references/site-suumo.md`
+- `.agents/skills/japan-real-estate-data-retriever/references/site-athome.md`
+- `.agents/skills/japan-real-estate-data-retriever/references/site-homes.md`
+- `.agents/skills/japan-real-estate-data-retriever/references/site-yahoo-japan.md`
 
 ## 数据 Schema
 
@@ -207,7 +250,7 @@ schemas/unified_listing.schema.json
 skill 内置副本：
 
 ```bash
-skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
+.agents/skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
 ```
 
 根目录 schema 是权威版本。修改 schema 时要同步 skill 内置副本。

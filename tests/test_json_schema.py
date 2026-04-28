@@ -15,7 +15,16 @@ class JsonSchemaTest(unittest.TestCase):
     def test_skill_schema_copy_matches_root_schema(self):
         root = json.loads(Path("schemas/unified_listing.schema.json").read_text(encoding="utf-8"))
         skill = json.loads(
-            Path("skills/japan-real-estate-data-retriever/references/unified_listing.schema.json").read_text(
+            Path(".agents/skills/japan-real-estate-data-retriever/references/unified_listing.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(root, skill)
+
+    def test_skill_query_schema_copy_matches_root_schema(self):
+        root = json.loads(Path("schemas/query.schema.json").read_text(encoding="utf-8"))
+        skill = json.loads(
+            Path(".agents/skills/japan-real-estate-data-retriever/references/query.schema.json").read_text(
                 encoding="utf-8"
             )
         )
