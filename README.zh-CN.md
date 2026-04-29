@@ -22,10 +22,22 @@ cd japan-real-estate-data-retriever
 uv sync
 ```
 
-如果希望在任意工作目录直接调用 CLI，可以把项目作为 editable uv tool 安装。安装后的命令是 `jreretrieve`：
+如果希望在任意工作目录直接调用 CLI，可以把项目作为 editable uv tool 安装。安装后的命令是 `jreretrieve`，它会指回当前 checkout，所以本地开发时修改源码后 CLI 能同步使用新代码：
 
 ```bash
 make install-local
+```
+
+把 companion skill 以 symlink 方式安装到 agent 的 skills 目录。默认目标是 Hermes 风格的 `~/.agents/skills`：
+
+```bash
+make install-skill-dev
+```
+
+如果要安装到 Codex 默认目录，用：
+
+```bash
+make install-codex-skill-dev
 ```
 
 通过环境变量提供 Browser Use Cloud API key。不要提交真实值：
@@ -67,11 +79,11 @@ jreretrieve run \
 jreretrieve stop-browser --browser-id <browser-session-id>
 ```
 
-下面的示例默认已经通过 `make install-local` 安装了 `jreretrieve`。
+下面的示例默认已经通过 `make install-local` 安装了 `jreretrieve`，并通过 `make install-skill-dev` 或 `make install-codex-skill-dev` 安装了 skill symlink。
 
 ### 给 Agent 看的版本
 
-如果要把这份 README 发给 Hermes/Codex 之类的 agent，可以让它按下面的命令安装。这个流程会在缺少 `uv` 时先安装 `uv`，再把 `jreretrieve` 安装到 `PATH`，最后从仓库外部 smoke test。运行前请替换 `<repo-url>`；如果 agent 已经在仓库 checkout 里，可以跳过 `git clone` 那一行。
+如果要把这份 README 发给 Hermes/Codex 之类的 agent，可以让它按下面的命令安装。这个流程会在缺少 `uv` 时先安装 `uv`，再把 `jreretrieve` 作为 editable 命令安装到 `PATH`，把 repo skill symlink 到 `~/.agents/skills`，最后从仓库外部 smoke test。运行前请替换 `<repo-url>`；如果 agent 已经在仓库 checkout 里，可以跳过 `git clone` 那一行。
 
 ```bash
 set -euo pipefail
@@ -87,7 +99,7 @@ fi
 
 cd japan-real-estate-data-retriever
 uv sync
-make install-local
+make install-hermes-dev
 
 command -v jreretrieve
 cd /tmp
@@ -119,7 +131,7 @@ jreretrieve --json sources list
 
 ```text
 .
-├── .agents/skills/japan-real-estate-data-retriever/ # Codex skill 与站点 workflow
+├── skills/japan-real-estate-data-retriever/         # companion skill 源文件与站点 workflow
 │   ├── SKILL.md
 │   └── references/                               # site-*.md、字段映射、探测记录
 ├── schemas/unified_listing.schema.json           # canonical JSON Schema
@@ -165,15 +177,34 @@ jreretrieve --help
 jreretrieve --json doctor
 ```
 
-`make install-local` 使用 `uv tool install --editable . --force`，会把 editable 项目安装成由 uv 管理的命令行工具。
+`make install-local` 使用 `uv tool install --editable . --force`，会把一个 uv 管理的命令 wrapper 安装到 PATH，同时让实现代码继续留在当前 checkout。
+
+以开发 symlink 方式安装 companion skill：
+
+```bash
+make install-skill-dev
+```
+
+默认会把 `skills/japan-real-estate-data-retriever` 链接到 `~/.agents/skills/japan-real-estate-data-retriever`。如果要安装到 Codex 默认目录，用：
+
+```bash
+make install-codex-skill-dev
+```
+
+也可以覆盖目标目录：
+
+```bash
+make install-skill-dev SKILL_HOME="$HOME/.custom-agent/skills"
+```
 
 ## 使用方法
 
-执行 `make install-local` 后，使用 `jreretrieve` 作为稳定命令层；给 Codex 或其他 agent 使用时优先加 `--json`。
+执行 `make install-local` 后，使用 `jreretrieve` 作为稳定命令层；给 Codex、Hermes 或其他 agent 使用时优先加 `--json`。
 
 命令面：
 
-- 安装/命令名：`make install-local`，之后使用 `jreretrieve`。
+- CLI 安装/命令名：`make install-local`，之后使用 `jreretrieve`。
+- Skill 安装：`make install-skill-dev` 安装到 `~/.agents/skills`，或 `make install-codex-skill-dev` 安装到 `~/.codex/skills`。
 - 环境检查：`jreretrieve --json doctor`。
 - 发现/解析：`sources list`、`sources resolve <name>`、`sources get <source>`。
 - 读取本地契约：`schema show`、`schema validate`、`workflow show`。
@@ -359,7 +390,7 @@ jreretrieve debug-local \
 ## 推荐执行流
 
 1. 将用户需求规范化为 query JSON。
-2. 按来源站点读取 `.agents/skills/japan-real-estate-data-retriever/references/site-*.md`。
+2. 按来源站点读取 checkout 内的 `skills/japan-real-estate-data-retriever/references/site-*.md`，或读取 agent skills 目录下的已安装 symlink。
 3. 单站点用 `run` 创建 Cloud Browser；多站点用 `run-all`，确保每个来源站点一个独立 Cloud Browser session。
 4. 你的 agent 通过 CDP 按站点 workflow 执行筛选、翻页、详情页抽取；每个 source 先写 raw，再做本地归一化。
 5. 如果出现导航超时或 `TargetClosedError`，先重连同一个 `cdpUrl` 并复用已加载 DOM。
@@ -369,15 +400,15 @@ jreretrieve debug-local \
 
 ## 参考文档
 
-- `.agents/skills/japan-real-estate-data-retriever/SKILL.md`
-- `.agents/skills/japan-real-estate-data-retriever/references/overall-workflow.md`
-- `.agents/skills/japan-real-estate-data-retriever/references/search-filter-capabilities.md`
-- `.agents/skills/japan-real-estate-data-retriever/references/unified-fields.md`
-- `.agents/skills/japan-real-estate-data-retriever/references/source-id-strategy.md`
-- `.agents/skills/japan-real-estate-data-retriever/references/site-suumo.md`
-- `.agents/skills/japan-real-estate-data-retriever/references/site-athome.md`
-- `.agents/skills/japan-real-estate-data-retriever/references/site-homes.md`
-- `.agents/skills/japan-real-estate-data-retriever/references/site-yahoo-japan.md`
+- `skills/japan-real-estate-data-retriever/SKILL.md`
+- `skills/japan-real-estate-data-retriever/references/overall-workflow.md`
+- `skills/japan-real-estate-data-retriever/references/search-filter-capabilities.md`
+- `skills/japan-real-estate-data-retriever/references/unified-fields.md`
+- `skills/japan-real-estate-data-retriever/references/source-id-strategy.md`
+- `skills/japan-real-estate-data-retriever/references/site-suumo.md`
+- `skills/japan-real-estate-data-retriever/references/site-athome.md`
+- `skills/japan-real-estate-data-retriever/references/site-homes.md`
+- `skills/japan-real-estate-data-retriever/references/site-yahoo-japan.md`
 
 ## 数据 Schema
 
@@ -390,7 +421,7 @@ schemas/unified_listing.schema.json
 skill 内置副本：
 
 ```bash
-.agents/skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
+skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
 ```
 
 根目录 schema 是权威版本。修改 schema 时要同步 skill 内置副本。

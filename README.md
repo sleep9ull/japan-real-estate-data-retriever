@@ -22,10 +22,22 @@ cd japan-real-estate-data-retriever
 uv sync
 ```
 
-If you want the CLI available from any working directory, install it as an editable uv tool. The installed command is `jreretrieve`:
+If you want the CLI available from any working directory, install it as an editable uv tool. The installed command is `jreretrieve`, and it points back to this checkout so source changes are picked up during local development:
 
 ```bash
 make install-local
+```
+
+Install the companion skill as a symlink into your agent's skill directory. The default target is `~/.agents/skills`, which is the expected Hermes-style location:
+
+```bash
+make install-skill-dev
+```
+
+For Codex's default skill directory, use:
+
+```bash
+make install-codex-skill-dev
 ```
 
 Provide your Browser Use Cloud API key through the environment. Do not commit real values:
@@ -67,11 +79,11 @@ The output file contains `browser.cdpUrl` plus the site workflow context. Your l
 jreretrieve stop-browser --browser-id <browser-session-id>
 ```
 
-The examples below assume `jreretrieve` has been installed with `make install-local`.
+The examples below assume `jreretrieve` has been installed with `make install-local` and the skill has been installed with `make install-skill-dev` or `make install-codex-skill-dev`.
 
 ### For Agents
 
-Use this block when giving the README to an agent such as Hermes. It installs `uv` if needed, installs `jreretrieve` on `PATH`, and smoke-tests the installed command from outside the repository. Replace `<repo-url>` before running, or skip the `git clone` line when already inside a checkout.
+Use this block when giving the README to an agent such as Hermes. It installs `uv` if needed, installs `jreretrieve` on `PATH` as an editable command, symlinks the repo skill into `~/.agents/skills`, and smoke-tests the installed command from outside the repository. Replace `<repo-url>` before running, or skip the `git clone` line when already inside a checkout.
 
 ```bash
 set -euo pipefail
@@ -87,7 +99,7 @@ fi
 
 cd japan-real-estate-data-retriever
 uv sync
-make install-local
+make install-hermes-dev
 
 command -v jreretrieve
 cd /tmp
@@ -119,7 +131,7 @@ For live Browser Use Cloud commands, provide auth out of band. Agents must not p
 
 ```text
 .
-├── .agents/skills/japan-real-estate-data-retriever/
+├── skills/japan-real-estate-data-retriever/
 │   ├── SKILL.md
 │   └── references/
 ├── schemas/unified_listing.schema.json
@@ -165,15 +177,34 @@ jreretrieve --help
 jreretrieve --json doctor
 ```
 
-`make install-local` uses `uv tool install --editable . --force`, which installs the editable project as a uv-managed command-line tool.
+`make install-local` uses `uv tool install --editable . --force`, which installs a uv-managed command wrapper on PATH while keeping the implementation in this checkout.
+
+Install the companion skill as a development symlink:
+
+```bash
+make install-skill-dev
+```
+
+By default this links `skills/japan-real-estate-data-retriever` into `~/.agents/skills/japan-real-estate-data-retriever`. To install into Codex's default skill directory, run:
+
+```bash
+make install-codex-skill-dev
+```
+
+You can override the skill target:
+
+```bash
+make install-skill-dev SKILL_HOME="$HOME/.custom-agent/skills"
+```
 
 ## Usage
 
-Use `jreretrieve` as the stable command layer after installing it with `make install-local`. Prefer `--json` for Codex or other agents.
+Use `jreretrieve` as the stable command layer after installing it with `make install-local`. Prefer `--json` for Codex, Hermes, or other agents.
 
 Command surface:
 
-- Install/name: `make install-local`, then `jreretrieve`.
+- CLI install/name: `make install-local`, then `jreretrieve`.
+- Skill install: `make install-skill-dev` for `~/.agents/skills`, or `make install-codex-skill-dev` for `~/.codex/skills`.
 - Setup: `jreretrieve --json doctor`.
 - Discovery/resolve: `sources list`, `sources resolve <name>`, `sources get <source>`.
 - Read local contracts: `schema show`, `schema validate`, `workflow show`.
@@ -341,7 +372,7 @@ jreretrieve debug-local \
 ## Recommended Flow
 
 1. Normalize the user request into query JSON.
-2. Load the relevant `.agents/skills/japan-real-estate-data-retriever/references/site-*.md` workflow.
+2. Load the relevant `skills/japan-real-estate-data-retriever/references/site-*.md` workflow from the checkout, or the installed symlink under your agent's skill directory.
 3. Use `run` for a single source or `run-all` for multi-source jobs; multi-source jobs must use one Cloud Browser session per source.
 4. Let your agent drive CDP according to the workflow: filters, pagination, detail pages, extraction; write per-source raw data before normalization.
 5. On navigation timeouts or `TargetClosedError`, reconnect to the same `cdpUrl` and reuse any loaded DOM before replacing the browser.
@@ -360,7 +391,7 @@ schemas/unified_listing.schema.json
 Bundled skill copy:
 
 ```bash
-.agents/skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
+skills/japan-real-estate-data-retriever/references/unified_listing.schema.json
 ```
 
 The root schema is authoritative.
