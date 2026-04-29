@@ -6,9 +6,9 @@ This is a workflow-first project for retrieving Japanese real estate listings. B
 
 ## Quickstart
 
-### For Humans
+### macOS / Local Development
 
-This project uses `uv` to manage the Python environment and run the project CLI. Install `uv` first if it is not already available. See the [official uv installation docs](https://docs.astral.sh/uv/getting-started/installation/) for platform-specific instructions.
+Use this path on your own Mac when you want editable CLI behavior and symlinked skills during development. This project uses `uv` to manage the Python environment and run the project CLI. Install `uv` first if it is not already available. See the [official uv installation docs](https://docs.astral.sh/uv/getting-started/installation/) for platform-specific instructions.
 
 ```bash
 uv --version
@@ -40,6 +40,57 @@ For Codex's default skill directory, use:
 make install-codex-skill-dev
 ```
 
+You can install both the editable CLI and the Codex skill symlink in one local development flow:
+
+```bash
+make install-local
+make install-codex-skill-dev
+make smoke
+```
+
+### Linux / Ubuntu Cloud Server
+
+Use this path on a Lightsail, EC2, or other Ubuntu server where Hermes or another agent should use this project. The CLI is still installed as an editable uv tool, and the skill is installed as a symlink into `~/.agents/skills`.
+
+```bash
+set -euo pipefail
+
+sudo apt-get update
+sudo apt-get install -y git curl make ca-certificates
+
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+git clone <repo-url> ~/japan-real-estate-data-retriever
+cd ~/japan-real-estate-data-retriever
+
+uv sync
+make install-hermes-dev
+```
+
+Configure Browser Use Cloud auth without printing or committing the real key:
+
+```bash
+mkdir -p ~/.jreretrieve
+chmod 700 ~/.jreretrieve
+cat > ~/.jreretrieve/config.toml <<'EOF'
+browser_use_api_key = "REPLACE_WITH_REAL_KEY"
+EOF
+chmod 600 ~/.jreretrieve/config.toml
+```
+
+Verify from outside the checkout:
+
+```bash
+cd /tmp
+command -v jreretrieve
+jreretrieve --json doctor
+jreretrieve --json sources list
+test -f ~/.agents/skills/japan-real-estate-data-retriever/SKILL.md
+```
+
 Provide your Browser Use Cloud API key through the environment. Do not commit real values:
 
 ```bash
@@ -50,6 +101,12 @@ You can also store local auth in `~/.jreretrieve/config.toml`:
 
 ```toml
 browser_use_api_key = "bu_your_key_here"
+```
+
+For checkout-local testing, copy `.env.example` to `.env.local` and fill it locally. `.env.local` is ignored by git:
+
+```bash
+cp .env.example .env.local
 ```
 
 Verify the install:
@@ -108,7 +165,7 @@ jreretrieve --json doctor
 jreretrieve --json sources list
 ```
 
-For live Browser Use Cloud commands, provide auth out of band. Agents must not print or commit real keys. The CLI reads auth in this order: `BROWSER_USE_API_KEY`, `~/.jreretrieve/config.toml`, then project `.env`.
+For live Browser Use Cloud commands, provide auth out of band. Agents must not print or commit real keys. The CLI reads auth in this order: `BROWSER_USE_API_KEY`, `~/.jreretrieve/config.toml`, then project `.env.local`.
 
 ## Architecture
 
@@ -144,7 +201,7 @@ For live Browser Use Cloud commands, provide auth out of band. Agents must not p
 
 ## Prerequisites
 
-Provide the Browser Use Cloud API key through the environment, user config, or a local `.env`. Never print or commit real values:
+Provide the Browser Use Cloud API key through the environment, user config, or a local `.env.local`. Never print or commit real values:
 
 ```bash
 export BROWSER_USE_API_KEY=bu_your_key_here
@@ -154,7 +211,7 @@ Auth precedence is:
 
 1. `BROWSER_USE_API_KEY` environment variable.
 2. `~/.jreretrieve/config.toml` with `browser_use_api_key = "..."`.
-3. Project-local `.env` for local runs.
+3. Project-local `.env.local` for checkout-local testing.
 
 Local development uses `uv`:
 
@@ -264,7 +321,7 @@ JSON policy:
 
 - `--json` writes machine-readable JSON to stdout only.
 - Errors under `--json` use `{"ok": false, "error": {"message": "..."}}` and never include credentials.
-- `doctor` reports the auth source category (`env`, `config`, `project_env`, or `missing`) without printing token values.
+- `doctor` reports the auth source category (`env`, `config`, `project_env_local`, or `missing`) without printing token values.
 - `request get` returns the Browser Use API response object; live writes are intentionally not exposed through the raw escape hatch.
 
 ## Primary Browser-Only Path

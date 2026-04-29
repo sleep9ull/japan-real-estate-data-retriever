@@ -18,7 +18,7 @@ This project retrieves Japanese real estate transaction/listing data and normali
 - For browser-only recovery, reconnect to the same `cdpUrl` and reuse an already loaded DOM before creating a replacement browser or switching to Cloud Agent fallback.
 - Write per-source raw artifacts before local normalization/ranking, then stop every Cloud Browser session when extraction or failure handling is complete.
 - Use the local `browser-use` CLI only for pure local browser debugging (`open`, `state`, `click`, screenshots, etc.); do not use CLI Cloud passthrough as a production or default path.
-- Load the Browser Use Cloud API key from `BROWSER_USE_API_KEY` first. Local runs may fall back to the project `.env`, but real values must never be printed or committed.
+- Load the Browser Use Cloud API key from `BROWSER_USE_API_KEY` first. Local checkout tests may fall back to the project `.env.local`, but real values must never be printed or committed.
 - All cloud browser and fallback agent sessions should use the Japan proxy: `proxyCountryCode: "jp"`.
 - The fixed source identifiers are `suumo`, `athome`, `homes`, and `yahoo_japan`.
 - The storage primary key is source-aware: use `source:source_listing_id`; when no source listing ID exists, use `source:url:<sha256-prefix>`.

@@ -9,6 +9,9 @@ from .paths import PROJECT_ROOT
 from .sites import get_site
 
 
+LOCAL_ENV_FILENAME = ".env.local"
+
+
 class BrowserUseLocalCliError(RuntimeError):
     pass
 
@@ -128,7 +131,7 @@ def _load_env_value(name: str) -> Optional[str]:
     if env_value:
         return env_value
 
-    env_path = PROJECT_ROOT / ".env"
+    env_path = PROJECT_ROOT / LOCAL_ENV_FILENAME
     if not env_path.exists():
         return None
 

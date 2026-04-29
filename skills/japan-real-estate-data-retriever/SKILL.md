@@ -15,7 +15,7 @@ Use this skill to turn a Japanese real estate search request into a browser-only
    command -v jreretrieve || make install-local
    jreretrieve --json doctor
    ```
-2. Confirm auth is configured through `BROWSER_USE_API_KEY`, `~/.jreretrieve/config.toml`, or the project `.env`. `doctor --json` reports only the auth source category (`env`, `config`, `project_env`, or `missing`) and must never print token values.
+2. Confirm auth is configured through `BROWSER_USE_API_KEY`, `~/.jreretrieve/config.toml`, or the project `.env.local`. `doctor --json` reports only the auth source category (`env`, `config`, `project_env_local`, or `missing`) and must never print token values.
 3. Identify the target site or sites with the CLI: `jreretrieve --json sources list` or `jreretrieve --json sources resolve <name>`. Fixed source ids are `suumo`, `athome`, `homes`, `yahoo_japan`. If the user says "all sites", create one independent Cloud Browser session per site and merge only after each source result is normalized.
 4. Validate query JSON before live work:
    ```bash

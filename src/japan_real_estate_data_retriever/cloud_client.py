@@ -11,6 +11,7 @@ from .paths import PROJECT_ROOT
 TERMINAL_STATUSES = {"idle", "stopped", "timed_out", "error"}
 BASE_URL_V3 = "https://api.browser-use.com/api/v3"
 CLOUD_BACKENDS = {"cloud", "rest"}
+LOCAL_ENV_FILENAME = ".env.local"
 
 
 class BrowserUseCloudError(RuntimeError):
@@ -93,7 +94,8 @@ class BrowserUseCloudClient:
     ) -> Dict[str, Any]:
         if not self.api_key:
             raise BrowserUseCloudError(
-                "Browser Use API key is required. Set BROWSER_USE_API_KEY or ~/.jreretrieve/config.toml."
+                "Browser Use API key is required. Set BROWSER_USE_API_KEY, "
+                "~/.jreretrieve/config.toml, or project .env.local."
             )
 
         data = None
@@ -155,6 +157,7 @@ def get_auth_status() -> Dict[str, Any]:
         "source": source,
         "env_var": "BROWSER_USE_API_KEY",
         "config_path": str(_user_config_path()),
+        "local_env_path": str(PROJECT_ROOT / LOCAL_ENV_FILENAME),
     }
 
 
@@ -172,7 +175,7 @@ def _load_env_value_with_source(name: str) -> Tuple[Optional[str], str]:
     if config_value:
         return config_value, "config"
 
-    env_path = PROJECT_ROOT / ".env"
+    env_path = PROJECT_ROOT / LOCAL_ENV_FILENAME
     if not env_path.exists():
         return None, "missing"
 
@@ -183,7 +186,7 @@ def _load_env_value_with_source(name: str) -> Tuple[Optional[str], str]:
         key, value = stripped.split("=", 1)
         if key.strip() == name:
             loaded = value.strip().strip('"').strip("'") or None
-            return loaded, "project_env" if loaded else "missing"
+            return loaded, "project_env_local" if loaded else "missing"
     return None, "missing"
 
 

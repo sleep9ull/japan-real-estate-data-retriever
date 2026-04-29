@@ -6,9 +6,9 @@
 
 ## 快速开始
 
-### 给人看的版本
+### macOS 本地开发安装
 
-本项目使用 `uv` 管理 Python 环境并运行项目 CLI。如果机器上还没有 `uv`，请先安装；不同平台的安装方式见 [uv 官方安装文档](https://docs.astral.sh/uv/getting-started/installation/)。
+如果是在自己的 Mac 上开发，使用这一套安装方式：CLI 用 editable install，skill 用 symlink install，后续改项目源码和 skill 都会同步生效。本项目使用 `uv` 管理 Python 环境并运行项目 CLI。如果机器上还没有 `uv`，请先安装；不同平台的安装方式见 [uv 官方安装文档](https://docs.astral.sh/uv/getting-started/installation/)。
 
 ```bash
 uv --version
@@ -40,6 +40,57 @@ make install-skill-dev
 make install-codex-skill-dev
 ```
 
+本地开发时，也可以直接按这一组命令完成 CLI 和 Codex skill 安装并验证：
+
+```bash
+make install-local
+make install-codex-skill-dev
+make smoke
+```
+
+### Linux/Ubuntu 云服务器安装
+
+如果是在 Lightsail、EC2 或其他 Ubuntu 云服务器上给 Hermes/agent 使用，使用这一套安装方式：CLI 仍然是 editable uv tool，skill 以 symlink 方式安装到 `~/.agents/skills`。
+
+```bash
+set -euo pipefail
+
+sudo apt-get update
+sudo apt-get install -y git curl make ca-certificates
+
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+git clone <repo-url> ~/japan-real-estate-data-retriever
+cd ~/japan-real-estate-data-retriever
+
+uv sync
+make install-hermes-dev
+```
+
+用用户级配置提供 Browser Use Cloud API key，不要打印或提交真实值：
+
+```bash
+mkdir -p ~/.jreretrieve
+chmod 700 ~/.jreretrieve
+cat > ~/.jreretrieve/config.toml <<'EOF'
+browser_use_api_key = "REPLACE_WITH_REAL_KEY"
+EOF
+chmod 600 ~/.jreretrieve/config.toml
+```
+
+从仓库外部验证安装：
+
+```bash
+cd /tmp
+command -v jreretrieve
+jreretrieve --json doctor
+jreretrieve --json sources list
+test -f ~/.agents/skills/japan-real-estate-data-retriever/SKILL.md
+```
+
 通过环境变量提供 Browser Use Cloud API key。不要提交真实值：
 
 ```bash
@@ -50,6 +101,12 @@ export BROWSER_USE_API_KEY=bu_your_key_here
 
 ```toml
 browser_use_api_key = "bu_your_key_here"
+```
+
+如果是 checkout 本地测试，可以把 `.env.example` 复制成 `.env.local` 后在本机填写。`.env.local` 会被 git 忽略：
+
+```bash
+cp .env.example .env.local
 ```
 
 验证安装：
@@ -108,7 +165,7 @@ jreretrieve --json doctor
 jreretrieve --json sources list
 ```
 
-如果 agent 要执行 Browser Use Cloud live 命令，请通过外部方式提供认证。不要让 agent 打印或提交真实 key。CLI 的认证读取顺序是：`BROWSER_USE_API_KEY`、`~/.jreretrieve/config.toml`、项目 `.env`。
+如果 agent 要执行 Browser Use Cloud live 命令，请通过外部方式提供认证。不要让 agent 打印或提交真实 key。CLI 的认证读取顺序是：`BROWSER_USE_API_KEY`、`~/.jreretrieve/config.toml`、项目 `.env.local`。
 
 ## 架构原则
 
@@ -144,7 +201,7 @@ jreretrieve --json sources list
 
 ## 前置条件
 
-生产路径需要 Browser Use Cloud API key。可以从环境变量、用户级 config 或本地 `.env` 读取；不要打印或提交真实值：
+生产路径需要 Browser Use Cloud API key。可以从环境变量、用户级 config 或本地 `.env.local` 读取；不要打印或提交真实值：
 
 ```bash
 export BROWSER_USE_API_KEY=bu_your_key_here
@@ -154,7 +211,7 @@ export BROWSER_USE_API_KEY=bu_your_key_here
 
 1. `BROWSER_USE_API_KEY` 环境变量。
 2. `~/.jreretrieve/config.toml` 中的 `browser_use_api_key = "..."`。
-3. 项目本地 `.env`，用于本地运行。
+3. 项目本地 `.env.local`，用于 checkout 本地测试。
 
 本地开发使用 `uv`：
 
@@ -264,7 +321,7 @@ JSON 约定：
 
 - `--json` 只向 stdout 输出机器可读 JSON。
 - `--json` 下的错误形如 `{"ok": false, "error": {"message": "..."}}`，且不会包含凭证。
-- `doctor` 只报告 auth 来源类别：`env`、`config`、`project_env` 或 `missing`，不打印 token。
+- `doctor` 只报告 auth 来源类别：`env`、`config`、`project_env_local` 或 `missing`，不打印 token。
 - `request get` 返回 Browser Use API 原始响应对象；raw escape hatch 暂不提供 live write。
 
 可选：仅在本地浏览器调试时安装 Browser Use CLI：

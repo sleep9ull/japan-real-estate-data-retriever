@@ -19,7 +19,7 @@ class CloudClientTest(unittest.TestCase):
         with patch.dict(os.environ, {"BROWSER_USE_API_KEY": "from-env"}):
             self.assertEqual(_load_api_key(), "from-env")
 
-    def test_load_api_key_reads_user_config_before_project_env(self):
+    def test_load_api_key_reads_user_config_before_project_env_local(self):
         with tempfile.TemporaryDirectory() as home:
             config_dir = Path(home) / ".jreretrieve"
             config_dir.mkdir()
@@ -31,6 +31,22 @@ class CloudClientTest(unittest.TestCase):
             with patch.dict(os.environ, {"HOME": home}, clear=True):
                 self.assertEqual(_load_api_key(), "from-config")
                 self.assertEqual(get_auth_status()["source"], "config")
+
+    def test_load_api_key_reads_project_env_local_after_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project_root = Path(directory)
+            (project_root / ".env.local").write_text(
+                'BROWSER_USE_API_KEY = "from-env-local"\n',
+                encoding="utf-8",
+            )
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch("japan_real_estate_data_retriever.cloud_client.PROJECT_ROOT", project_root):
+                    self.assertEqual(_load_api_key(), "from-env-local")
+                    status = get_auth_status()
+
+        self.assertEqual(status["source"], "project_env_local")
+        self.assertEqual(status["local_env_path"], str(project_root / ".env.local"))
 
     def test_default_cloud_backend_uses_rest_api(self):
         with patch.dict(os.environ, {"BROWSER_USE_API_KEY": "from-env"}):
